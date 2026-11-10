@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db
+  namespace: tp
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {app: db}
+  template:
+    metadata:
+      labels: {app: db}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-bookworm
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef: {name: app-secrets}
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
+      volumes:
+        - name: data
+          emptyDir: {}      # TP : donnees non persistantes (utiliser un PVC en production)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  namespace: tp
+spec:
+  selector: {app: db}
+  ports:
+    - port: 5432
+      targetPort: 5432

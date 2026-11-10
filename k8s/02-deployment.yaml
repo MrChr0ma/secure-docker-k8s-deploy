@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  namespace: tp
+  labels: {app: web-app}
+spec:
+  replicas: 3
+  selector:
+    matchLabels: {app: web-app}
+  template:
+    metadata:
+      labels: {app: web-app}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: web-app
+          image: tp-app-web:alpine
+          imagePullPolicy: IfNotPresent     # image importee localement dans K3S
+          ports:
+            - containerPort: 8000
+          env:
+            - {name: DATABASE_HOST, value: db}
+            - {name: DATABASE_PORT, value: "5432"}
+            - {name: FLASK_ENV, value: production}
+            - name: DATABASE_NAME
+              valueFrom: {secretKeyRef: {name: app-secrets, key: POSTGRES_DB}}
+            - name: DATABASE_USER
+              valueFrom: {secretKeyRef: {name: app-secrets, key: POSTGRES_USER}}
+            - name: DATABASE_PASSWORD
+              valueFrom: {secretKeyRef: {name: app-secrets, key: POSTGRES_PASSWORD}}
+            - name: SECRET_KEY
+              valueFrom: {secretKeyRef: {name: app-secrets, key: SECRET_KEY}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+          livenessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+      volumes:
+        - name: tmp
+          emptyDir: {}
